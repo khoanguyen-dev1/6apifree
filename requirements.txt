@@ -1,5 +1,5 @@
-flask 
-requests 
-aiohttp 
-beautifulsoup4 
+flask
 flask-cors
+aiohttp
+beautifulsoup4
+requests
