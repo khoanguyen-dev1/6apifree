@@ -24,6 +24,7 @@ relzheaders = {
 
 relz_key_pattern = r'const\s+keyValue\s*=\s*"([^"]+)"'
 
+# Function to get content from a URL
 async def get_content(url, session):
     async with session.get(url, headers=relzheaders, allow_redirects=True) as response:
         html_text = await response.text()
@@ -55,12 +56,14 @@ async def fetch_key_value(link):
 def fetch_key_value_sync(link):
     return asyncio.run(fetch_key_value(link))
 
+# Get the user's public IP address from ipify
 async def get_user_ip():
     async with ClientSession() as session:
         async with session.get("https://api.ipify.org/") as response:
             ip = await response.text()
             return ip
 
+# Send bypass notification to Discord with IP in embed
 def send_bypass_notification(url, key_value, user_ip):
     embed = {
         "embeds": [
@@ -74,7 +77,7 @@ def send_bypass_notification(url, key_value, user_ip):
                         "inline": True
                     }
                 ],
-                "color": 3066993, 
+                "color": 3066993,  # You can choose any color here in RGB format
             }
         ]
     }
@@ -105,10 +108,10 @@ async def get_unlock_url():
 
     if url.startswith('https://getkey.farrghii.com/'):
         try:
-            key_value = fetch_key_value_sync(url)
+            key_value = await fetch_key_value(url)
             if key_value:
                 cache[url] = key_value
-                send_bypass_notification(url, key_value, user_ip)  
+                send_bypass_notification(url, key_value, user_ip)  # Send webhook with user IP
                 return jsonify({'result': key_value, 'credit': 'UwU'})
             else:
                 return jsonify({'error': 'Key value not found', 'credit': 'UwU'}), 404
@@ -124,6 +127,7 @@ async def get_unlock_url():
     else:
         return jsonify({'error': 'Invalid URL. URL must start with https://getkey.farrghii.com/, https://socialwolvez.com/ or https://rekonise.com/'}), 400
 
+# Handle SocialWolvez URLs
 async def handle_socialwolvez(url, user_ip):
     try:
         response = requests.get(url)
@@ -154,6 +158,7 @@ async def handle_socialwolvez(url, user_ip):
     except requests.RequestException as e:
         return jsonify({'error': 'Failed to make request to the provided URL.', 'details': str(e)}), 500
 
+# Handle Rekonise URLs
 async def handle_rekonise(url, user_ip):
     try:
         parsed_url = urlparse(url)
@@ -174,4 +179,4 @@ async def handle_rekonise(url, user_ip):
         return jsonify({'error': 'Failed to make request to the provided URL.', 'details': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0')
+    app.run(debug=False, host='0.0.0.0', port=9888)
