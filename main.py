@@ -69,7 +69,7 @@ def send_bypass_notification(url, key_value, user_ip):
         "embeds": [
             {
                 "title": "Bypass Notification",
-                "description": f"URL: {url}\nUnlocked Key: {key_value}",
+                "description": f"URL: {url}\nUnlocked Key: ```{key_value}```",
                 "fields": [
                     {
                         "name": "User IP",
@@ -77,7 +77,7 @@ def send_bypass_notification(url, key_value, user_ip):
                         "inline": True
                     }
                 ],
-                "color": 3066993,  # You can choose any color here in RGB format
+                "color": 3066993,  
             }
         ]
     }
@@ -103,7 +103,6 @@ async def get_unlock_url():
     if url in cache:
         return jsonify({'result': cache[url], 'credit': 'UwU (from cache)'}), 200
 
-    # Fetch the user IP address
     user_ip = await get_user_ip()
 
     if url.startswith('https://getkey.farrghii.com/'):
@@ -111,7 +110,7 @@ async def get_unlock_url():
             key_value = await fetch_key_value(url)
             if key_value:
                 cache[url] = key_value
-                send_bypass_notification(url, key_value, user_ip)  # Send webhook with user IP
+                send_bypass_notification(url, key_value, user_ip) 
                 return jsonify({'result': key_value, 'credit': 'UwU'})
             else:
                 return jsonify({'error': 'Key value not found', 'credit': 'UwU'}), 404
@@ -122,12 +121,30 @@ async def get_unlock_url():
         return await handle_socialwolvez(url, user_ip)
     
     elif url.startswith('https://rekonise.com/'):
-        return await handle_rekonise(url, user_ip)
-    
-    else:
-        return jsonify({'error': 'Invalid URL. URL must start with https://getkey.farrghii.com/, https://socialwolvez.com/ or https://rekonise.com/'}), 400
+        return await handle_rekonise(url, user_ip)    
 
-# Handle SocialWolvez URLs
+    elif url.startswith('https://pastebin.com/'):
+        api_url = f"http://helya.pylex.xyz:10234/api/addlink?url={url}"
+        try:
+            response = requests.get(api_url)
+            response.raise_for_status()
+            
+            api_data = response.json()
+            result = api_data.get('result')
+
+            if result is None:
+                return jsonify({'error': 'No result field found in the response'}), 400
+            cache[url] = result
+            send_bypass_notification(url, result, user_ip)  
+            return jsonify({'result': result})
+        
+        except requests.exceptions.RequestException as e:
+            return jsonify({'error': str(e)}), 500
+
+    else:
+        return jsonify({'error': 'Invalid URL. URL must start with https://getkey.farrghii.com/, https://socialwolvez.com/, https://rekonise.com/, or https://pastebin.com/'}), 400
+
+
 async def handle_socialwolvez(url, user_ip):
     try:
         response = requests.get(url)
@@ -145,7 +162,7 @@ async def handle_socialwolvez(url, user_ip):
 
                 if extracted_url and extracted_name:
                     cache[url] = extracted_url
-                    send_bypass_notification(url, extracted_url, user_ip)  # Send webhook with user IP
+                    send_bypass_notification(url, extracted_url, user_ip) 
                     return jsonify({'result': extracted_url, 'name': extracted_name})
                 else:
                     return jsonify({'error': 'Required data not found in the JSON structure.'}), 500
@@ -158,7 +175,6 @@ async def handle_socialwolvez(url, user_ip):
     except requests.RequestException as e:
         return jsonify({'error': 'Failed to make request to the provided URL.', 'details': str(e)}), 500
 
-# Handle Rekonise URLs
 async def handle_rekonise(url, user_ip):
     try:
         parsed_url = urlparse(url)
@@ -178,5 +194,6 @@ async def handle_rekonise(url, user_ip):
     except requests.RequestException as e:
         return jsonify({'error': 'Failed to make request to the provided URL.', 'details': str(e)}), 500
 
+
 if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=9888)
+    app.run(debug=False, host='0.0.0.0', port=5000)
