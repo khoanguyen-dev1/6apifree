@@ -179,7 +179,6 @@ async def handle_rekonise(url, user_ip):
     except requests.RequestException as e:
         return jsonify({'error': 'Failed to make request to the provided URL.', 'details': str(e)}), 500
 
-# Pastebin handler
 async def handle_pastebin(url):
     paste_url = url
     parsed_url = urlparse(paste_url)
@@ -196,14 +195,24 @@ async def handle_pastebin(url):
     }
 
     try:
+        # Get user IP
+        user_ip = await get_user_ip()
+
+        # Fetch the raw paste content
         response = requests.get(raw_url, headers=headers)
         response.raise_for_status()
-        send_bypass_notification(url,response.text, user_ip)  
+
+        # Cache the result and send the bypass notification
+        cache[url] = response.text
+        send_bypass_notification(url, response.text, user_ip)
+
         return jsonify({'result': response.text})
+
     except requests.exceptions.HTTPError:
         return jsonify({'error': 'Paste not found or not public'}), 404
     except requests.exceptions.RequestException as e:
         return jsonify({'error': f'Error fetching paste: {str(e)}'}), 500
+
 
 
 if __name__ == '__main__':
