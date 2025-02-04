@@ -198,7 +198,6 @@ async def handle_pastebin(url):
     try:
         response = requests.get(raw_url, headers=headers)
         response.raise_for_status()
-        cache[url] = response.text
         send_bypass_notification(url,response.text, user_ip)  
         return jsonify({'result': response.text})
     except requests.exceptions.HTTPError:
