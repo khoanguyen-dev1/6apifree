@@ -124,22 +124,7 @@ async def get_unlock_url():
         return await handle_rekonise(url, user_ip)    
 
     elif url.startswith('https://pastebin.com/'):
-        api_url = f"http://helya.pylex.xyz:10234/api/addlink?url={url}"
-        try:
-            response = requests.get(api_url)
-            response.raise_for_status()
-            
-            api_data = response.json()
-            result = api_data.get('result')
-
-            if result is None:
-                return jsonify({'error': 'No result field found in the response'}), 400
-            cache[url] = result
-            send_bypass_notification(url, result, user_ip)  
-            return jsonify({'result': result})
-        
-        except requests.exceptions.RequestException as e:
-            return jsonify({'error': str(e)}), 500
+        return await handle_pastebin(url)
 
     else:
         return jsonify({'error': 'Invalid URL. URL must start with https://getkey.farrghii.com/, https://socialwolvez.com/, https://rekonise.com/, or https://pastebin.com/'}), 400
@@ -193,6 +178,31 @@ async def handle_rekonise(url, user_ip):
 
     except requests.RequestException as e:
         return jsonify({'error': 'Failed to make request to the provided URL.', 'details': str(e)}), 500
+
+# Pastebin handler
+async def handle_pastebin(url):
+    paste_url = url
+    parsed_url = urlparse(paste_url)
+    path_parts = parsed_url.path.strip('/').split('/')
+
+    if len(path_parts) < 1:
+        return jsonify({'error': 'Invalid URL'}), 400
+
+    paste_id = path_parts[-1]
+    raw_url = f'https://pastebin.com/raw/{paste_id}'
+
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+
+    try:
+        response = requests.get(raw_url, headers=headers)
+        response.raise_for_status()
+        return jsonify({'result': response.text})
+    except requests.exceptions.HTTPError:
+        return jsonify({'error': 'Paste not found or not public'}), 404
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': f'Error fetching paste: {str(e)}'}), 500
 
 
 if __name__ == '__main__':
