@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import asyncio
-
+import aiohttp
 app = Flask(__name__)
 CORS(app)
 
@@ -25,11 +25,21 @@ relzheaders = {
 relz_key_pattern = r'const\s+keyValue\s*=\s*"([^"]+)"'
 
 # Function to get content from a URL
-async def get_content(url, session):
-    async with session.get(url, headers=relzheaders, allow_redirects=True) as response:
+async def get_paste_drop_content(url):
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Referer': 'https://paste-drop.com/'
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers) as response:
+            if response.status == 200:
+                return await response.text()
+            else:
+                return None
+async def get_content(url, session, headers=None):
+    async with session.get(url, headers=headers, allow_redirects=True) as response:
         html_text = await response.text()
         return html_text
-
 async def fetch_key_value(link):
     urls = [
         link,
@@ -93,6 +103,7 @@ def send_bypass_notification(url, key_value, user_ip):
     except requests.RequestException as e:
         print(f"Error sending webhook notification: {e}")
 
+# Combined bypass route that handles both unlocking URLs and paste-drop content
 @app.route('/bypass', methods=['GET'])
 async def get_unlock_url():
     url = request.args.get('url')
@@ -105,6 +116,7 @@ async def get_unlock_url():
 
     user_ip = await get_user_ip()
 
+    # Handle different cases based on the URL pattern
     if url.startswith('https://getkey.farrghii.com/'):
         try:
             key_value = await fetch_key_value(url)
@@ -126,10 +138,34 @@ async def get_unlock_url():
     elif url.startswith('https://pastebin.com/'):
         return await handle_pastebin(url)
 
+    elif url.startswith('https://paste-drop.com/'):  # New handling for paste-drop
+        return await handle_paste_drop(url)
+
     else:
-        return jsonify({'error': 'Invalid URL. URL must start with https://getkey.farrghii.com/, https://socialwolvez.com/, https://rekonise.com/, or https://pastebin.com/'}), 400
+        return jsonify({'error': 'Invalid URL. URL must start with https://getkey.farrghii.com/, https://socialwolvez.com/, https://rekonise.com/, https://pastebin.com/, or https://paste-drop.com/'}), 400
 
 
+# Handling paste-drop content extraction
+async def handle_paste_drop(url):
+    try:
+        response = await get_paste_drop_content(url)  
+        if response:
+            soup = BeautifulSoup(response, 'html.parser')
+            content = soup.find('span', id='content')
+            if content:
+                parsed_content = content.get_text().replace('\\', '')
+                cache[url] = parsed_content
+                send_bypass_notification(url, parsed_content, await get_user_ip())
+                return jsonify({"status": "success", "result": parsed_content}), 200
+            else:
+                return jsonify({"status": "fail", "message": "Content not found."}), 404
+        else:
+            return jsonify({"status": "fail", "message": "Unable to fetch paste content."}), 500
+    except requests.RequestException as e:
+        return jsonify({"status": "fail", "message": f"Error fetching content: {str(e)}"}), 500
+
+
+# Helper function for handling socialwolvez URLs
 async def handle_socialwolvez(url, user_ip):
     try:
         response = requests.get(url)
@@ -195,16 +231,13 @@ async def handle_pastebin(url):
     }
 
     try:
-        # Get user IP
-        user_ip = await get_user_ip()
-
         # Fetch the raw paste content
         response = requests.get(raw_url, headers=headers)
         response.raise_for_status()
 
         # Cache the result and send the bypass notification
         cache[url] = response.text
-        send_bypass_notification(url, response.text, user_ip)
+        send_bypass_notification(url, response.text, await get_user_ip())
 
         return jsonify({'result': response.text})
 
@@ -212,7 +245,6 @@ async def handle_pastebin(url):
         return jsonify({'error': 'Paste not found or not public'}), 404
     except requests.exceptions.RequestException as e:
         return jsonify({'error': f'Error fetching paste: {str(e)}'}), 500
-
 
 
 if __name__ == '__main__':
