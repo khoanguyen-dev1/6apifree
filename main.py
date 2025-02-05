@@ -200,7 +200,7 @@ async def handle_paste_drop(url):
     except Exception as e:
         return jsonify({"status": "fail", "message": f"Error fetching content: {str(e)}"}), 500
 
-async def handle_pastefy(url):
+async def handle_pastefy(url , user_ip):
     parsed_url = urlparse(url)
 
     if not parsed_url.scheme or not parsed_url.netloc:
@@ -215,7 +215,9 @@ async def handle_pastefy(url):
         async with ClientSession() as session:
             response = await get_content(user_url, session)
         if response:
-            return jsonify({'status': 'success', 'data': response}), 200
+            cache[url] = response
+            send_bypass_notification(url, response, user_ip)
+            return jsonify({'status': 'success', 'result': response}), 200
         else:
             return jsonify({'status': 'error', 'message': f"Không thể truy cập URL. Mã lỗi: {response.status_code}"}), response.status_code
 
