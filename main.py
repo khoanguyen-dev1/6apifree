@@ -1,45 +1,25 @@
 import re
-import os
+import json
 import requests
 from aiohttp import ClientSession
 from bs4 import BeautifulSoup
-import json
-from urllib.parse import urlparse
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import asyncio
-import aiohttp
+from urllib.parse import urlparse
+
 app = Flask(__name__)
 CORS(app)
 
 cache = {}
 webhook_url = 'https://discord.com/api/webhooks/1335485229766541365/YoQ3lUNedTQb5QnEgMrs7TP-YU673vPnhZDK2r75wYt7dzVvJgcxCEgRgbgSD5Zpe7fo'
-relzheaders = {
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.5',
-    'DNT': '1',
-    'Connection': 'close',
-    'Referer': 'https://linkvertise.com'
-}
 
 relz_key_pattern = r'const\s+keyValue\s*=\s*"([^"]+)"'
 
-# Function to get content from a URL
-async def get_paste_drop_content(url):
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Referer': 'https://paste-drop.com/'
-    }
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=headers) as response:
-            if response.status == 200:
-                return await response.text()
-            else:
-                return None
 async def get_content(url, session, headers=None):
     async with session.get(url, headers=headers, allow_redirects=True) as response:
         html_text = await response.text()
         return html_text
+
 async def fetch_key_value(link):
     urls = [
         link,
@@ -48,7 +28,6 @@ async def fetch_key_value(link):
         'https://getkey.farrghii.com/check3.php',
         'https://getkey.farrghii.com/finished.php'
     ]
-
     async with ClientSession() as session:
         for url in urls:
             html_text = await get_content(url, session)
@@ -60,20 +39,14 @@ async def fetch_key_value(link):
                     key_match = re.search(relz_key_pattern, script_content)
                     if key_match:
                         return key_match.group(1)
-
     return None
 
-def fetch_key_value_sync(link):
-    return asyncio.run(fetch_key_value(link))
-
-# Get the user's public IP address from ipify
 async def get_user_ip():
     async with ClientSession() as session:
         async with session.get("https://api.ipify.org/") as response:
             ip = await response.text()
             return ip
 
-# Send bypass notification to Discord with IP in embed
 def send_bypass_notification(url, key_value, user_ip):
     embed = {
         "embeds": [
@@ -87,7 +60,7 @@ def send_bypass_notification(url, key_value, user_ip):
                         "inline": True
                     }
                 ],
-                "color": 3066993,  
+                "color": 3066993,
             }
         ]
     }
@@ -103,7 +76,6 @@ def send_bypass_notification(url, key_value, user_ip):
     except requests.RequestException as e:
         print(f"Error sending webhook notification: {e}")
 
-# Combined bypass route that handles both unlocking URLs and paste-drop content
 @app.route('/bypass', methods=['GET'])
 async def get_unlock_url():
     url = request.args.get('url')
@@ -116,13 +88,12 @@ async def get_unlock_url():
 
     user_ip = await get_user_ip()
 
-    # Handle different cases based on the URL pattern
     if url.startswith('https://getkey.farrghii.com/'):
         try:
             key_value = await fetch_key_value(url)
             if key_value:
                 cache[url] = key_value
-                send_bypass_notification(url, key_value, user_ip) 
+                send_bypass_notification(url, key_value, user_ip)
                 return jsonify({'result': key_value, 'credit': 'UwU'})
             else:
                 return jsonify({'error': 'Key value not found', 'credit': 'UwU'}), 404
@@ -131,69 +102,46 @@ async def get_unlock_url():
 
     elif url.startswith('https://socialwolvez.com/'):
         return await handle_socialwolvez(url, user_ip)
-    
+
     elif url.startswith('https://rekonise.com/'):
-        return await handle_rekonise(url, user_ip)    
+        return await handle_rekonise(url, user_ip)
 
     elif url.startswith('https://pastebin.com/'):
         return await handle_pastebin(url)
 
-    elif url.startswith('https://paste-drop.com/'):  # New handling for paste-drop
+    elif url.startswith('https://paste-drop.com/'):
         return await handle_paste_drop(url)
+    
+    elif url.startswith('https://pastefy.app/'):
+        return await handle_pastefy(url)
 
     else:
-        return jsonify({'error': 'Invalid URL. URL must start with https://getkey.farrghii.com/, https://socialwolvez.com/, https://rekonise.com/, https://pastebin.com/, or https://paste-drop.com/'}), 400
+        return jsonify({'error': 'Invalid URL. URL must start with a supported base.'}), 400
 
-
-# Handling paste-drop content extraction
-async def handle_paste_drop(url):
-    try:
-        response = await get_paste_drop_content(url)  
-        if response:
-            soup = BeautifulSoup(response, 'html.parser')
-            content = soup.find('span', id='content')
-            if content:
-                parsed_content = content.get_text().replace('\\', '')
-                cache[url] = parsed_content
-                send_bypass_notification(url, parsed_content, await get_user_ip())
-                return jsonify({"status": "success", "result": parsed_content}), 200
-            else:
-                return jsonify({"status": "fail", "message": "Content not found."}), 404
-        else:
-            return jsonify({"status": "fail", "message": "Unable to fetch paste content."}), 500
-    except requests.RequestException as e:
-        return jsonify({"status": "fail", "message": f"Error fetching content: {str(e)}"}), 500
-
-
-# Helper function for handling socialwolvez URLs
 async def handle_socialwolvez(url, user_ip):
     try:
-        response = requests.get(url)
-        response.raise_for_status()
+        async with ClientSession() as session:
+            response = await get_content(url, session)
+            soup = BeautifulSoup(response, 'html.parser')
+            script_tag = soup.find('script', {'id': '__NUXT_DATA__'})
+            if script_tag and script_tag.string:
+                try:
+                    data = json.loads(script_tag.string)
+                    extracted_url = data[5]
+                    extracted_name = data[6]
 
-        soup = BeautifulSoup(response.text, 'html.parser')
+                    if extracted_url and extracted_name:
+                        cache[url] = extracted_url
+                        send_bypass_notification(url, extracted_url, user_ip)
+                        return jsonify({'result': extracted_url, 'name': extracted_name})
+                    else:
+                        return jsonify({'error': 'Required data not found in the JSON structure.'}), 500
 
-        script_tag = soup.find('script', {'id': '__NUXT_DATA__'})
-        if script_tag and script_tag.string:
-            try:
-                data = json.loads(script_tag.string)
-
-                extracted_url = data[5]
-                extracted_name = data[6]
-
-                if extracted_url and extracted_name:
-                    cache[url] = extracted_url
-                    send_bypass_notification(url, extracted_url, user_ip) 
-                    return jsonify({'result': extracted_url, 'name': extracted_name})
-                else:
-                    return jsonify({'error': 'Required data not found in the JSON structure.'}), 500
-
-            except (json.JSONDecodeError, KeyError, IndexError) as e:
-                return jsonify({'error': 'Failed to parse JSON data.', 'details': str(e)}), 500
-        else:
-            return jsonify({'error': 'Script tag with JSON data not found.'}), 404
-
-    except requests.RequestException as e:
+                except (json.JSONDecodeError, KeyError, IndexError) as e:
+                    return jsonify({'error': 'Failed to parse JSON data.', 'details': str(e)}), 500
+            else:
+                return jsonify({'error': 'Script tag with JSON data not found.'}), 404
+    except Exception as e:
         return jsonify({'error': 'Failed to make request to the provided URL.', 'details': str(e)}), 500
 
 async def handle_rekonise(url, user_ip):
@@ -201,19 +149,19 @@ async def handle_rekonise(url, user_ip):
         parsed_url = urlparse(url)
         sPathname = parsed_url.path.strip('/')
         api_url = f"https://api.rekonise.com/social-unlocks/{sPathname}/unlock"
-        response = requests.get(api_url)
-        json_data = response.json()
-        key = json_data.get("url")
+        async with ClientSession() as session:
+            response = await get_content(api_url, session)
+            json_data = json.loads(response)
+            key = json_data.get("url")
 
-        if response.status_code == 200:
-            cache[url] = key
-            send_bypass_notification(url, key, user_ip)  
-            return jsonify({"result": key}), 200
-        else:
-            return jsonify({"error": "Failed to fetch unlock URL from API"}), 500
-
-    except requests.RequestException as e:
-        return jsonify({'error': 'Failed to make request to the provided URL.', 'details': str(e)}), 500
+            if key:
+                cache[url] = key
+                send_bypass_notification(url, key, user_ip)
+                return jsonify({"result": key}), 200
+            else:
+                return jsonify({"error": "Failed to fetch unlock URL from API"}), 500
+    except Exception as e:
+        return jsonify({'error': 'Failed to fetch unlock URL.', 'details': str(e)}), 500
 
 async def handle_pastebin(url):
     paste_url = url
@@ -226,25 +174,53 @@ async def handle_pastebin(url):
     paste_id = path_parts[-1]
     raw_url = f'https://pastebin.com/raw/{paste_id}'
 
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
+    try:
+        async with ClientSession() as session:
+            response = await get_content(raw_url, session)
+            cache[url] = response
+            send_bypass_notification(url, response, await get_user_ip())
+            return jsonify({'result': response})
+
+    except Exception as e:
+        return jsonify({'error': f'Error fetching paste: {str(e)}'}), 500
+
+async def handle_paste_drop(url):
+    try:
+        async with ClientSession() as session:
+            response = await get_content(url, session)
+            soup = BeautifulSoup(response, 'html.parser')
+            content = soup.find('span', id='content')
+            if content:
+                parsed_content = content.get_text().replace('\\', '')
+                cache[url] = parsed_content
+                send_bypass_notification(url, parsed_content, await get_user_ip())
+                return jsonify({"status": "success", "result": parsed_content}), 200
+            else:
+                return jsonify({"status": "fail", "message": "Content not found."}), 404
+    except Exception as e:
+        return jsonify({"status": "fail", "message": f"Error fetching content: {str(e)}"}), 500
+
+async def handle_pastefy(url):
+    parsed_url = urlparse(url)
+
+    if not parsed_url.scheme or not parsed_url.netloc:
+        return jsonify({'status': 'error', 'message': 'URL không hợp lệ'}), 400
+    
+    if '/raw' not in parsed_url.path:
+        user_url = f'{url}/raw'
+    else:
+        user_url = url
 
     try:
-        # Fetch the raw paste content
-        response = requests.get(raw_url, headers=headers)
-        response.raise_for_status()
+        async with ClientSession() as session:
+            response = await get_content(user_url, session)
+        if response:
+            return jsonify({'status': 'success', 'data': response}), 200
+        else:
+            return jsonify({'status': 'error', 'message': f"Không thể truy cập URL. Mã lỗi: {response.status_code}"}), response.status_code
 
-        # Cache the result and send the bypass notification
-        cache[url] = response.text
-        send_bypass_notification(url, response.text, await get_user_ip())
-
-        return jsonify({'result': response.text})
-
-    except requests.exceptions.HTTPError:
-        return jsonify({'error': 'Paste not found or not public'}), 404
-    except requests.exceptions.RequestException as e:
-        return jsonify({'error': f'Error fetching paste: {str(e)}'}), 500
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 if __name__ == '__main__':
