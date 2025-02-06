@@ -246,7 +246,7 @@ async def handle_pastefy(url):
         if response:
             cache[url] = response
             send_bypass_notification(url, response, await get_user_ip())
-            return jsonify({'status': 'success', 'data': response}), 200
+            return jsonify({'status': 'success', 'result': response}), 200
         else:
             return jsonify({'status': 'error', 'message': f"Không thể truy cập URL. Mã lỗi: {response.status_code}"}), response.status_code
 
