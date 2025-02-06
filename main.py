@@ -52,7 +52,7 @@ def send_bypass_notification(url, key_value, user_ip):
         "embeds": [
             {
                 "title": "Bypass Notification",
-                "description": f"URL: {url}\nUnlocked Key: ```{key_value}```",
+                "description": f"URL: {url}\nUnlocked Key: ```{key_value}```    \n",
                 "fields": [
                     {
                         "name": "User IP",
@@ -75,6 +75,18 @@ def send_bypass_notification(url, key_value, user_ip):
             print(f"Failed to send webhook notification. Status code: {response.status_code}")
     except requests.RequestException as e:
         print(f"Error sending webhook notification: {e}")
+
+async def handle_plaintext(url):
+    try:
+        response = await get_content(url, session=None)
+        soup = BeautifulSoup(response, 'html.parser')
+        plaintext_div = soup.find('div', class_='plaintext')
+        if plaintext_div:
+            return plaintext_div.get_text(strip=True)
+        else:
+            return "No div with class 'plaintext' found on the page."
+    except Exception as e:
+        return f"An error occurred: {str(e)}"
 
 @app.route('/bypass', methods=['GET'])
 async def get_unlock_url():
@@ -115,8 +127,25 @@ async def get_unlock_url():
     elif url.startswith('https://pastefy.app/'):
         return await handle_pastefy(url)
 
+    elif url.startswith('https://anotepad.com/'):
+        try:
+            async with ClientSession() as session:
+                response = await get_content(url, session)
+                soup = BeautifulSoup(response, 'html.parser')
+                plaintext_div = soup.find('div', class_='plaintext')
+                if plaintext_div:
+                    plaintext_content = plaintext_div.get_text(strip=True)
+                    cache[url] = plaintext_content
+                    send_bypass_notification(url, plaintext_content, await get_user_ip())
+                    return jsonify({'result': plaintext_content})
+                else:
+                    return jsonify({'error': "No div with class 'plaintext' found on the page."}), 404
+        except Exception as e:
+            return jsonify({'error': f"An error occurred: {str(e)}"}), 500
+
     else:
         return jsonify({'error': 'Invalid URL. URL must start with a supported base.'}), 400
+
 
 async def handle_socialwolvez(url, user_ip):
     try:
@@ -217,13 +246,12 @@ async def handle_pastefy(url):
         if response:
             cache[url] = response
             send_bypass_notification(url, response, await get_user_ip())
-            return jsonify({'status': 'success', 'result': response}), 200
+            return jsonify({'status': 'success', 'data': response}), 200
         else:
             return jsonify({'status': 'error', 'message': f"Không thể truy cập URL. Mã lỗi: {response.status_code}"}), response.status_code
 
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
-
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)
