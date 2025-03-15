@@ -117,7 +117,10 @@ async def get_unlock_url():
 
     elif url.startswith('https://rekonise.com/'):
         return await handle_rekonise(url, user_ip)
-
+        
+    elif url.startswith('https://rkns.link/'):
+        return await handle_rekonise(url, user_ip)
+        
     elif url.startswith('https://pastebin.com/'):
         return await handle_pastebin(url)
 
