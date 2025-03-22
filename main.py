@@ -41,16 +41,11 @@ async def fetch_key_value(link):
                         return key_match.group(1)
     return None
 
-def get_user_ip():
-    # Get the IP address from the request
-    user_ip = request.remote_addr
-
-    # In case you're behind a proxy (e.g., Nginx, Apache, etc.), 
-    # you might need to check for 'X-Forwarded-For' header to get the real IP
-    if 'X-Forwarded-For' in request.headers:
-        user_ip = request.headers.getlist('X-Forwarded-For')[0]
-
-    return user_ip
+async def get_user_ip():
+    forwarded_ip = request.headers.get('X-Forwarded-For')
+    if forwarded_ip:
+        return forwarded_ip.split(',')[0]
+    return request.remote_addr
 
 def send_bypass_notification(url, key_value, user_ip):
     embed = {
