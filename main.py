@@ -41,11 +41,16 @@ async def fetch_key_value(link):
                         return key_match.group(1)
     return None
 
-async def get_user_ip():
-    async with ClientSession() as session:
-        async with session.get("https://api.ipify.org/") as response:
-            ip = await response.text()
-            return ip
+def get_user_ip():
+    # Get the IP address from the request
+    user_ip = request.remote_addr
+
+    # In case you're behind a proxy (e.g., Nginx, Apache, etc.), 
+    # you might need to check for 'X-Forwarded-For' header to get the real IP
+    if 'X-Forwarded-For' in request.headers:
+        user_ip = request.headers.getlist('X-Forwarded-For')[0]
+
+    return user_ip
 
 def send_bypass_notification(url, key_value, user_ip):
     embed = {
