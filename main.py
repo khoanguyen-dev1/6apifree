@@ -42,10 +42,10 @@ async def fetch_key_value(link):
     return None
 
 async def get_user_ip():
-    forwarded_ip = request.headers.get('X-Forwarded-For')
-    if forwarded_ip:
-        return forwarded_ip.split(',')[0]
-    return request.remote_addr
+    async with ClientSession() as session:
+        async with session.get("https://api.ipify.org/") as response:
+            ip = await response.text()
+            return ip
 
 def send_bypass_notification(url, key_value, user_ip):
     embed = {
@@ -100,7 +100,27 @@ async def get_unlock_url():
 
     user_ip = await get_user_ip()
 
-    if url.startswith('https://getkey.farrghii.com/'):
+    if url.startswith('https://mboost.me/'):
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+            }
+            async with ClientSession() as session:
+                html_text = await get_content(url, session, headers=headers)
+                targeturl_regex = r'"targeturl\\?":\\?"([^"]+)"'
+                match = re.search(targeturl_regex, html_text, re.DOTALL)
+
+                if match:
+                    key_value = match.group(1)
+                    cache[url] = key_value
+                    send_bypass_notification(url, key_value, user_ip)
+                    return jsonify({'result': key_value, 'credit': 'UwU'})
+                else:
+                    return jsonify({'error': 'Target URL not found', 'credit': 'UwU'}), 404
+        except Exception as e:
+            return jsonify({'error': f"An error occurred: {str(e)}", 'credit': 'UwU'}), 500
+
+    elif url.startswith('https://getkey.farrghii.com/'):
         try:
             key_value = await fetch_key_value(url)
             if key_value:
@@ -117,10 +137,7 @@ async def get_unlock_url():
 
     elif url.startswith('https://rekonise.com/'):
         return await handle_rekonise(url, user_ip)
-        
-    elif url.startswith('https://rkns.link/'):
-        return await handle_rekonise(url, user_ip)
-        
+
     elif url.startswith('https://pastebin.com/'):
         return await handle_pastebin(url)
 
@@ -149,6 +166,8 @@ async def get_unlock_url():
     else:
         return jsonify({'error': 'Invalid URL. URL must start with a supported base.'}), 400
 
+
+# Handle other URL types, similar to the existing logic
 
 async def handle_socialwolvez(url, user_ip):
     try:
@@ -189,7 +208,7 @@ async def handle_rekonise(url, user_ip):
             if key:
                 cache[url] = key
                 send_bypass_notification(url, key, user_ip)
-                return jsonify({"result": key}), 200
+                return jsonify({"status" : "success","result": key}), 200
             else:
                 return jsonify({"error": "Failed to fetch unlock URL from API"}), 500
     except Exception as e:
@@ -211,7 +230,7 @@ async def handle_pastebin(url):
             response = await get_content(raw_url, session)
             cache[url] = response
             send_bypass_notification(url, response, await get_user_ip())
-            return jsonify({'result': response})
+            return jsonify({"status" : "success",'result': response})
 
     except Exception as e:
         return jsonify({'error': f'Error fetching paste: {str(e)}'}), 500
@@ -249,7 +268,7 @@ async def handle_pastefy(url):
         if response:
             cache[url] = response
             send_bypass_notification(url, response, await get_user_ip())
-            return jsonify({'status': 'success', 'result': response}), 200
+            return jsonify({'status': 'success', 'data': response}), 200
         else:
             return jsonify({'status': 'error', 'message': f"Không thể truy cập URL. Mã lỗi: {response.status_code}"}), response.status_code
 
